@@ -1,0 +1,447 @@
+---
+title: "SSB tax - NHANES"
+author: "Sanjay Basu"
+date: "1/11/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# install.packages('dplyr', repos='http://cran.us.r-project.org')
+# install.packages('tidyr', repos='http://cran.us.r-project.org')
+# install.packages('purrr', repos='http://cran.us.r-project.org')
+# install.packages('nhanesA', repos='http://cran.us.r-project.org')
+# install.packages('furrr', repos='http://cran.us.r-project.org')
+# install.packages('mice', repos='http://cran.us.r-project.org')
+# install.packages('survey', repos='http://cran.us.r-project.org')
+# install.packages("sjlabelled", repos='http://cran.us.r-project.org')
+# install.packages("haven", repos='http://cran.us.r-project.org')
+
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(nhanesA)
+library(furrr)
+library(mice)
+library(survey)
+library(sjlabelled)
+library(readr)
+library(haven)
+
+```
+
+## NHANES import
+
+extract and define needed variables from NHANES 2015-2018
+note the CKD-EPI equation is used to define CKD, http://nephron.com/epi_equation ; our justification for this decision was the results from: https://jamanetwork.com/journals/jama/fullarticle/1151529
+
+
+```{r NHANES 2017-2018}
+demo_j = nhanes('DEMO_J') %>%
+  mutate(age = RIDAGEYR,
+         female = (RIAGENDR==2),
+         white = (RIDRETH3==3),
+         black = (RIDRETH3==4),
+         asian = (RIDRETH3==6),
+         other = ((RIDRETH3!=3)&(RIDRETH3!=4)&(RIDRETH3!=6)),
+         hisp = (RIDRETH3<=2),
+         intweight = WTINT2YR/3,
+         mecweight = WTMEC2YR/3,
+         psu = SDMVPSU,
+         strata = SDMVSTRA) %>%
+  select(SEQN, age, female, white, black, asian, other, hisp, intweight, mecweight, psu, strata)
+hiq_j = nhanes('HIQ_J') %>%
+  mutate(privins = (HIQ031A==14),
+         privins = replace_na(privins, 0),
+         medicare = (HIQ031B==15),
+         medicare = replace_na(medicare, 0),
+         medicaid = (HIQ031D==17),
+         medicaid = replace_na(medicaid, 0),
+         uninsured = (HIQ031AA==40),
+         uninsured =  replace_na(uninsured,0)) %>%
+  select(SEQN, privins, medicare,  medicaid, uninsured)
+ocq_j = nhanes('OCQ_J') %>%
+  filter((OCQ260 ==1)&(OCD150 ==1)) %>%
+  mutate(mgmt = NA,
+         blcol = NA,
+         whcol = NA) %>%
+  select(SEQN, mgmt, blcol, whcol)
+bmx_j = nhanes('BMX_J') %>%
+  mutate(bmi = BMXBMI,
+         wtkg = BMXWT,
+         htm = BMXHT/100) %>%
+  select(SEQN, bmi, wtkg, htm)
+mcq_j = nhanes('MCQ_J') %>%
+  mutate(chd = (MCQ160B==1)|(MCQ160C==1)|(MCQ160D==1)|(MCQ160E==1),
+         str = (MCQ160F==1)) %>%
+  select(SEQN, chd, str)
+rxq_drug = nhanes('RXQ_DRUG') %>%
+  mutate(RXDDRGID = as.character("RXDDRGID"))
+rxq_rx_j = nhanes('RXQ_RX_J') %>%
+  mutate(RXDDRGID = as.character("RXDDRGID")) %>%
+  left_join(rxq_drug, by = "RXDDRGID") %>%
+  filter(RXDDCN1B=="ANTIDIABETIC AGENTS") %>%
+  mutate(dmmed = 1) %>%
+  group_by(SEQN) %>%
+  summarise(dmmed = max(dmmed)) %>%
+  select(SEQN,dmmed)
+ghb_j = nhanes('GHB_J') %>%
+  select(SEQN, LBXGH)
+glu_j = nhanes('GLU_J') %>%
+  mutate(fastweight = WTSAF2YR/3) %>%
+  select(SEQN, LBXGLU,fastweight)
+# ogtt_j = nhanes('OGTT_J') %>%
+#   select(SEQN, LBXGLT)
+diq_j = nhanes('DIQ_J') %>%
+  full_join(ghb_j, by="SEQN") %>%
+  full_join(glu_j, by="SEQN") %>%
+ # full_join(ogtt_j, by="SEQN") %>%
+  full_join(rxq_rx_j, by="SEQN") %>%
+  mutate(dmmed = replace_na(dmmed,0)) %>%
+  mutate(dm = ((LBXGH>=6.5)|(LBXGLU>=126)|(DIQ010==1)),
+         dm = replace_na(dm, 0)) %>%
+  select(SEQN,dm,fastweight)
+biopro_j = nhanes('BIOPRO_J') %>%
+  select(SEQN, LBXSCR) 
+biopro_j = zap_label(biopro_j)
+demo_j = zap_label(demo_j)
+kiq_u_j = zap_label(nhanes('KIQ_U_J')) %>%
+  full_join(biopro_j, by="SEQN") %>%
+  full_join(demo_j, by="SEQN") %>%
+  mutate(scr = LBXSCR,
+         kappa = 0.7*female + 0.9 *(1-female),
+         alpha = -0.329*female -0.411*(1-female),
+         sk = scr/kappa,
+         minsk= sk*(sk<1)+1*(sk>=1),
+         maxsk = sk*(sk>=1)+1*(sk<1),
+         egfr = 141 *(minsk^alpha) *
+           (maxsk^(-1.209))*
+           (0.993^age)*
+           (1.018*female+1*(1-female))*
+           (1.159*black+1*(1-black)),
+         egfr_mdrd = 186 * (scr^(-1.154))*
+           (age^(-0.203))*
+          (1.212*black+1*(1-black))*
+          (0.742*female+1*(1-female)),
+         ckd = (egfr<90),
+         ckd_mdrd = (egfr_mdrd<90)) %>%
+  select(SEQN, ckd, ckd_mdrd)
+ohxref_j = nhanes('OHXREF_J') %>%
+  mutate(dental = (OHAROCDT==1)&(OHAROCGP==1)) %>%
+  select(SEQN, dental)
+dr1iff_j = nhanes('DR1IFF_J') %>%
+  select(SEQN, DR1IFDCD, DR1IGRMS, DR1IKCAL) %>%
+  filter((DR1IFDCD>=92410110  & DR1IFDCD<92410120) | 
+           (DR1IFDCD>=92410310  & DR1IFDCD<92410320) | 
+           (DR1IFDCD>=92410330  & DR1IFDCD<92410340) | 
+           (DR1IFDCD>=92410340  & DR1IFDCD<92410350) | 
+           (DR1IFDCD>=92410360  & DR1IFDCD<92410370) | 
+           (DR1IFDCD>=92410390  & DR1IFDCD<92410400) | 
+           (DR1IFDCD>=92410410  & DR1IFDCD<92410420) | 
+           (DR1IFDCD>=92410510  & DR1IFDCD<92410520) | 
+           (DR1IFDCD>=92410550  & DR1IFDCD<92410560) | 
+           (DR1IFDCD>=92410610  & DR1IFDCD<92410620) | 
+           (DR1IFDCD>=92410710  & DR1IFDCD<92410720) | 
+           (DR1IFDCD>=92410810  & DR1IFDCD<92410820) | 
+           (DR1IFDCD>=92411510  & DR1IFDCD<92411520) | 
+           (DR1IFDCD>=92411520  & DR1IFDCD<92411530) | 
+           (DR1IFDCD>=92416010  & DR1IFDCD<92416020) | 
+           (DR1IFDCD>=92417010  & DR1IFDCD<92417020) | 
+           (DR1IFDCD>=92431000  & DR1IFDCD<92431010) | 
+           (DR1IFDCD>=92432000  & DR1IFDCD<92432010) | 
+           (DR1IFDCD>=92433000  & DR1IFDCD<92433010))  %>%
+  group_by(SEQN) %>%
+  summarise(ssb_g = sum(DR1IGRMS),
+            ssb_kcal = sum(DR1IKCAL))
+
+dr2iff_j = nhanes('DR2IFF_J') %>%
+  select(SEQN, DR2IFDCD, DR2IGRMS, DR2IKCAL) %>%
+  filter((DR2IFDCD>=92410110  & DR2IFDCD<92410120) | 
+           (DR2IFDCD>=92410310  & DR2IFDCD<92410320) | 
+           (DR2IFDCD>=92410330  & DR2IFDCD<92410340) | 
+           (DR2IFDCD>=92410340  & DR2IFDCD<92410350) | 
+           (DR2IFDCD>=92410360  & DR2IFDCD<92410370) | 
+           (DR2IFDCD>=92410390  & DR2IFDCD<92410400) | 
+           (DR2IFDCD>=92410410  & DR2IFDCD<92410420) | 
+           (DR2IFDCD>=92410510  & DR2IFDCD<92410520) | 
+           (DR2IFDCD>=92410550  & DR2IFDCD<92410560) | 
+           (DR2IFDCD>=92410610  & DR2IFDCD<92410620) | 
+           (DR2IFDCD>=92410710  & DR2IFDCD<92410720) | 
+           (DR2IFDCD>=92410810  & DR2IFDCD<92410820) | 
+           (DR2IFDCD>=92411510  & DR2IFDCD<92411520) | 
+           (DR2IFDCD>=92411520  & DR2IFDCD<92411530) | 
+           (DR2IFDCD>=92416010  & DR2IFDCD<92416020) | 
+           (DR2IFDCD>=92417010  & DR2IFDCD<92417020) | 
+           (DR2IFDCD>=92431000  & DR2IFDCD<92431010) | 
+           (DR2IFDCD>=92432000  & DR2IFDCD<92432010) | 
+           (DR2IFDCD>=92433000  & DR2IFDCD<92433010))  %>%
+  group_by(SEQN) %>%
+  summarise(ssb_g = sum(DR2IGRMS),
+            ssb_kcal = sum(DR2IKCAL)) 
+
+driff_j = dr1iff_j %>%
+  full_join(dr2iff_j, by = "SEQN")  %>%
+  replace_na(list(ssb_g.x = 0, ssb_g.y = 0, ssb_kcal.x = 0, ssb_kcal.y = 0)) %>%
+  rowwise() %>%
+  mutate(ssb_g = mean(c(ssb_g.x,ssb_g.y)),
+         ssb_kcal = mean(c(ssb_kcal.x,ssb_kcal.y))) %>%
+  select(SEQN,  ssb_g, ssb_kcal)
+
+
+
+
+```
+
+```{r NHANES 2015-2016}
+demo_i = nhanes('DEMO_I') %>%
+  mutate(age = RIDAGEYR,
+         female = (RIAGENDR==2),
+         white = (RIDRETH3==3),
+         black = (RIDRETH3==4),
+         asian = (RIDRETH3==6),
+         other = ((RIDRETH3!=3)&(RIDRETH3!=4)&(RIDRETH3!=6)),
+         hisp = (RIDRETH3<=2),
+         intweight = WTINT2YR/3,
+         mecweight = WTMEC2YR/3,
+         psu = SDMVPSU,
+         strata = SDMVSTRA) %>%
+  select(SEQN, age, female, white, black, asian, other, hisp, intweight, mecweight, psu, strata)
+hiq_i = nhanes('HIQ_I') %>%
+  mutate(privins = (HIQ031A==14),
+         privins = replace_na(privins, 0),
+         medicare = (HIQ031B==15),
+         medicare = replace_na(medicare, 0),
+         medicaid = (HIQ031D==17),
+         medicaid = replace_na(medicaid, 0),
+         uninsured = (HIQ031AA==40),
+         uninsured =  replace_na(uninsured,0)) %>%
+  select(SEQN, privins, medicare,  medicaid, uninsured)
+ocq_i = nhanes('OCQ_I') %>%
+  filter((OCQ260 ==1)&(OCD150 ==1)) %>%
+  mutate(mgmt = NA,
+         blcol = NA,
+         whcol = NA) %>%
+  select(SEQN, mgmt, blcol, whcol)
+bmx_i = nhanes('BMX_I') %>%
+  mutate(bmi = BMXBMI,
+         wtkg = BMXWT,
+         htm = BMXHT/100) %>%
+  select(SEQN, bmi, wtkg, htm)
+mcq_i = nhanes('MCQ_I') %>%
+  mutate(chd = (MCQ160B==1)|(MCQ160C==1)|(MCQ160D==1)|(MCQ160E==1),
+         str = (MCQ160F==1)) %>%
+  select(SEQN, chd, str)
+rxq_drug = nhanes('RXQ_DRUG')  %>%
+  mutate(RXDDRGID = as.character("RXDDRGID"))
+rxq_rx_i = nhanes('RXQ_RX_I')  %>%
+  mutate(RXDDRGID = as.character("RXDDRGID")) %>%
+  left_join(rxq_drug, by = "RXDDRGID") %>%
+  filter(RXDDCN1B=="ANTIDIABETIC AGENTS") %>%
+  mutate(dmmed = 1) %>%
+  group_by(SEQN) %>%
+  summarise(dmmed = max(dmmed)) %>%
+  select(SEQN,dmmed)
+ghb_i = nhanes('GHB_I') %>%
+  select(SEQN, LBXGH)
+glu_i = nhanes('GLU_I') %>%
+  mutate(fastweight = WTSAF2YR/3) %>%
+  select(SEQN, LBXGLU,fastweight)
+ogtt_i = nhanes('OGTT_I') %>%
+  select(SEQN, LBXGLT)
+diq_i = nhanes('DIQ_I') %>%
+  full_join(ghb_i, by="SEQN") %>%
+  full_join(glu_i, by="SEQN") %>%
+  full_join(ogtt_i, by="SEQN") %>%
+  full_join(rxq_rx_i, by="SEQN") %>%
+  mutate(dm = ((LBXGH>=6.5)|(LBXGLU>=126)|(LBXGLT>=200)|(DIQ010==1)),
+         dm = replace_na(dm, 0)) %>%
+  select(SEQN,dm,fastweight)
+biopro_i = nhanes('BIOPRO_I') %>%
+  select(SEQN, LBXSCR)
+kiq_u_i = nhanes('KIQ_U_I') %>%
+  full_join(biopro_i, by="SEQN") %>%
+  full_join(demo_i, by="SEQN") %>%
+  mutate(scr = LBXSCR,
+         kappa = 0.7*female + 0.9 *(1-female),
+         alpha = -0.329*female -0.411*(1-female),
+         sk = scr/kappa,
+         minsk = sk*(sk<1)+1*(sk>=1),
+         maxsk = sk*(sk>=1)+1*(sk<1),
+         egfr = 141 *(minsk^alpha) *
+           (maxsk^(-1.209))*
+           (0.993^age)*
+           (1.018*female+1*(1-female))*
+           (1.159*black+1*(1-black)),
+         egfr_mdrd = 186 * (scr^(-1.154))*
+           (age^(-0.203))*
+          (1.212*black+1*(1-black))*
+          (0.742*female+1*(1-female)),
+         ckd = (egfr<90),
+         ckd_mdrd = (egfr_mdrd<90)) %>%
+  select(SEQN, ckd, ckd_mdrd)
+ohxref_i = nhanes('OHXREF_I') %>%
+  mutate(dental = (OHAROCDT==1)&(OHAROCGP==1)) %>%
+  select(SEQN, dental)
+
+dr1iff_i = nhanes('DR1IFF_I') %>%
+  select(SEQN, DR1IFDCD, DR1IGRMS, DR1IKCAL) %>%
+  filter((DR1IFDCD>=92410110  & DR1IFDCD<92410120) | 
+           (DR1IFDCD>=92410310  & DR1IFDCD<92410320) | 
+           (DR1IFDCD>=92410330  & DR1IFDCD<92410340) | 
+           (DR1IFDCD>=92410340  & DR1IFDCD<92410350) | 
+           (DR1IFDCD>=92410360  & DR1IFDCD<92410370) | 
+           (DR1IFDCD>=92410390  & DR1IFDCD<92410400) | 
+           (DR1IFDCD>=92410410  & DR1IFDCD<92410420) | 
+           (DR1IFDCD>=92410510  & DR1IFDCD<92410520) | 
+           (DR1IFDCD>=92410550  & DR1IFDCD<92410560) | 
+           (DR1IFDCD>=92410610  & DR1IFDCD<92410620) | 
+           (DR1IFDCD>=92410710  & DR1IFDCD<92410720) | 
+           (DR1IFDCD>=92410810  & DR1IFDCD<92410820) | 
+           (DR1IFDCD>=92411510  & DR1IFDCD<92411520) | 
+           (DR1IFDCD>=92411520  & DR1IFDCD<92411530) | 
+           (DR1IFDCD>=92416010  & DR1IFDCD<92416020) | 
+           (DR1IFDCD>=92417010  & DR1IFDCD<92417020) | 
+           (DR1IFDCD>=92431000  & DR1IFDCD<92431010) | 
+           (DR1IFDCD>=92432000  & DR1IFDCD<92432010) | 
+           (DR1IFDCD>=92433000  & DR1IFDCD<92433010))  %>%
+  group_by(SEQN) %>%
+  summarise(ssb_g = sum(DR1IGRMS),
+            ssb_kcal = sum(DR1IKCAL)) 
+
+dr2iff_i = nhanes('DR2IFF_I') %>%
+  select(SEQN, DR2IFDCD, DR2IGRMS, DR2IKCAL) %>%
+  filter((DR2IFDCD>=92410110  & DR2IFDCD<92410120) | 
+           (DR2IFDCD>=92410310  & DR2IFDCD<92410320) | 
+           (DR2IFDCD>=92410330  & DR2IFDCD<92410340) | 
+           (DR2IFDCD>=92410340  & DR2IFDCD<92410350) | 
+           (DR2IFDCD>=92410360  & DR2IFDCD<92410370) | 
+           (DR2IFDCD>=92410390  & DR2IFDCD<92410400) | 
+           (DR2IFDCD>=92410410  & DR2IFDCD<92410420) | 
+           (DR2IFDCD>=92410510  & DR2IFDCD<92410520) | 
+           (DR2IFDCD>=92410550  & DR2IFDCD<92410560) | 
+           (DR2IFDCD>=92410610  & DR2IFDCD<92410620) | 
+           (DR2IFDCD>=92410710  & DR2IFDCD<92410720) | 
+           (DR2IFDCD>=92410810  & DR2IFDCD<92410820) | 
+           (DR2IFDCD>=92411510  & DR2IFDCD<92411520) | 
+           (DR2IFDCD>=92411520  & DR2IFDCD<92411530) | 
+           (DR2IFDCD>=92416010  & DR2IFDCD<92416020) | 
+           (DR2IFDCD>=92417010  & DR2IFDCD<92417020) | 
+           (DR2IFDCD>=92431000  & DR2IFDCD<92431010) | 
+           (DR2IFDCD>=92432000  & DR2IFDCD<92432010) | 
+           (DR2IFDCD>=92433000  & DR2IFDCD<92433010))  %>%
+  group_by(SEQN) %>%
+  summarise(ssb_g = sum(DR2IGRMS),
+            ssb_kcal = sum(DR2IKCAL))
+
+driff_i = dr1iff_i %>%
+  full_join(dr2iff_i, by = "SEQN")  %>%
+  replace_na(list(ssb_g.x = 0, ssb_g.y = 0, ssb_kcal.x = 0, ssb_kcal.y = 0)) %>%
+  rowwise() %>%
+  mutate(ssb_g = mean(c(ssb_g.x,ssb_g.y)),
+         ssb_kcal = mean(c(ssb_kcal.x,ssb_kcal.y))) %>%
+  select(SEQN,  ssb_g, ssb_kcal)
+
+```
+
+## NHANES join
+
+join and limit to employed pop by occ class, starting with ocq and left joins to limit to those employed in priv sec
+
+```{r NHANES data joins}
+
+
+nhanes15 = zap_label(demo_i) %>%
+  left_join(zap_label(hiq_i), by="SEQN") %>%
+  left_join(zap_label(bmx_i), by="SEQN") %>%
+  left_join(zap_label(mcq_i), by="SEQN") %>%
+  left_join(zap_label(diq_i), by="SEQN") %>%
+  left_join(zap_label(kiq_u_i), by="SEQN") %>%
+  left_join(zap_label(ohxref_i), by="SEQN") %>%
+  left_join(zap_label(driff_i), by = "SEQN") %>%
+  mutate(obese = (bmi>=30))
+
+nhanes15$SEQN = zap_label(nhanes15$SEQN)
+
+nhanes17 = zap_label(demo_j) %>%
+  left_join(zap_label(hiq_j), by="SEQN") %>%
+  left_join(zap_label(bmx_j), by="SEQN") %>%
+  left_join(zap_label(mcq_j), by="SEQN") %>%
+  left_join(zap_label(diq_j), by="SEQN") %>%
+  left_join(zap_label(kiq_u_j), by="SEQN") %>%
+  left_join(zap_label(ohxref_j), by="SEQN") %>%
+  left_join(zap_label(driff_j), by = "SEQN") %>%
+  mutate(obese = (bmi>=30))
+
+
+nhanes = bind_rows(list(nhanes17, nhanes15)) 
+nhanes$female <- as.factor(nhanes$female)
+nhanes$white <- as.factor(nhanes$white)
+nhanes$black <- as.factor(nhanes$black)
+nhanes$asian <- as.factor(nhanes$asian)
+nhanes$other <- as.factor(nhanes$other)
+nhanes$hisp <- as.factor(nhanes$hisp)
+nhanes$privins <- as.factor(nhanes$privins)
+nhanes$chd <- as.factor(nhanes$chd)
+nhanes$str <- as.factor(nhanes$str)
+nhanes$dm <- as.factor(nhanes$dm)
+nhanes$ckd <- as.factor(nhanes$ckd)
+nhanes$ckd_mdrd <- as.factor(nhanes$ckd_mdrd)
+nhanes$dental <- as.factor(nhanes$dental)
+nhanes$obese <- as.factor(nhanes$obese)
+nhanes$ssb_g[is.na(nhanes$ssb_g)] = 0
+nhanes$ssb_kcal[is.na(nhanes$ssb_kcal)] = 0
+
+nhanesDesign <- svydesign(id      = ~psu,
+                          strata  = ~strata,
+                          weights = ~intweight,
+                          nest    = TRUE,
+                          data    = nhanes)
+nhanes_mec = nhanes %>%
+  filter(mecweight!='NA')
+nhanesDesign_mec <- svydesign(id      = ~psu,
+                          strata  = ~strata,
+                          weights = ~mecweight,
+                          nest    = TRUE,
+                          data    = nhanes_mec)
+nhanes_lab = nhanes %>%
+  filter(fastweight!='NA')
+nhanesDesign_lab <- svydesign(id      = ~psu,
+                          strata  = ~strata,
+                          weights = ~fastweight,
+                          nest    = TRUE,
+                          data    = nhanes_lab)
+
+summary(nhanesDesign)
+summary(nhanesDesign_mec)
+summary(nhanesDesign_lab)
+
+setwd("~/Box/Research/Research projects/SSB tax")
+save(nhanes,file="nhanes")
+
+```
+## Multiple imputation
+```{r mice}
+set.seed(100)
+imp = mice(nhanes)
+
+nhanes_imp  = complete(imp, "long")
+# nhanes_imp = rbind(nhanes_imp,
+#                    nhanes_imp,
+#                    nhanes_imp,
+#                    nhanes_imp,
+#                    nhanes_imp,
+#                    nhanes_imp,
+#                    nhanes_imp,
+#                    nhanes_imp,
+#                    nhanes_imp,
+#                    nhanes_imp)
+
+save(nhanes_imp,file="nhanes_imp")
+write_csv(nhanes_imp, path = "nhanes_imp.csv")
+
+
+
+```
+

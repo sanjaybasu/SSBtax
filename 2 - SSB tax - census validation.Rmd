@@ -1,0 +1,279 @@
+---
+title: "SSB tax - Census validation"
+author: "Sanjay Basu"
+date: "1/11/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# install.packages('tidyverse', repos='http://cran.us.r-project.org')
+# install.packages('tidycensus', repos='http://cran.us.r-project.org')
+
+library(tidyverse)
+library(tidycensus)
+```
+
+## Compare NHANES to Census
+
+for face validity
+
+```{r ACS 2019 download}
+census_api_key("502c9ebce6cbb78e55b5799866a5771ad6411885", install=T, overwrite=T)
+readRenviron("~/.Renviron")
+v17 <- load_variables(2019, "acs5", cache = TRUE)
+
+```
+
+## Extract relevant ACS variables
+
+civilian SF/Oakland population by age and sex and race
+
+```{r Age/sex distribution in ACS of privately employed}
+sf_white <- get_acs(state = "CA",
+               county = "San Francisco ",
+              geography = "county",
+              table = ("B01001A"))
+sf_black <- get_acs(state = "CA",
+               county = "San Francisco ",
+              geography = "county",
+              table = ("B01001B"))
+sf_asian <- get_acs(state = "CA",
+               county = "San Francisco ",
+              geography = "county",
+              table = ("B01001D"))
+sf_hisp <- get_acs(state = "CA",
+               county = "San Francisco ",
+              geography = "county",
+              table = ("B01001I"))
+sf_oth1 <- get_acs(state = "CA",
+               county = "San Francisco ",
+              geography = "county",
+              table = ("B01001C"))
+sf_oth2 <- get_acs(state = "CA",
+               county = "San Francisco ",
+              geography = "county",
+              table = ("B01001E"))
+sf_oth3 <- get_acs(state = "CA",
+               county = "San Francisco ",
+              geography = "county",
+              table = ("B01001F"))
+sf_oth4 <- get_acs(state = "CA",
+               county = "San Francisco ",
+              geography = "county",
+              table = ("B01001G"))
+
+sf_acs = rbind(sf_white,
+         sf_black,
+         sf_asian,
+         sf_hisp,
+         sf_oth1,
+         sf_oth2,
+         sf_oth3,
+         sf_oth4)
+
+sf_demo = read_csv("~/Box/Research/Research projects/SSB tax/acskey.csv")
+
+sf = cbind(sf_acs,sf_demo) %>%
+  drop_na() %>%
+  select(estimate, age_min, age_max, female, white, black, asian,  other, hisp)
+
+
+
+
+oak_white <- get_acs(state = "CA",
+                    county = "Alameda ",
+                    geography = "county",
+                    table = ("B01001A"))
+oak_black <- get_acs(state = "CA",
+                    county = "Alameda ",
+                    geography = "county",
+                    table = ("B01001B"))
+oak_asian <- get_acs(state = "CA",
+                    county = "Alameda ",
+                    geography = "county",
+                    table = ("B01001D"))
+oak_hisp <- get_acs(state = "CA",
+                   county = "Alameda ",
+                   geography = "county",
+                   table = ("B01001I"))
+oak_oth1 <- get_acs(state = "CA",
+                   county = "Alameda ",
+                   geography = "county",
+                   table = ("B01001C"))
+oak_oth2 <- get_acs(state = "CA",
+                   county = "Alameda ",
+                   geography = "county",
+                   table = ("B01001E"))
+oak_oth3 <- get_acs(state = "CA",
+                   county = "Alameda ",
+                   geography = "county",
+                   table = ("B01001F"))
+oak_oth4 <- get_acs(state = "CA",
+                   county = "Alameda ",
+                   geography = "county",
+                   table = ("B01001G"))
+
+oak_acs = rbind(oak_white,
+               oak_black,
+               oak_asian,
+               oak_hisp,
+               oak_oth1,
+               oak_oth2,
+               oak_oth3,
+               oak_oth4)
+
+oak_demo = read_csv("~/Box/Research/Research projects/SSB tax/acskey.csv")
+
+oak = cbind(oak_acs,oak_demo) %>%
+  drop_na() %>%
+  select(estimate, age_min, age_max, female, white, black, asian,  other, hisp)
+
+
+
+
+
+
+```
+
+## weight  NHANES
+
+
+```{r NHANES transformed to ACS}
+
+
+setwd("~/Box/Research/Research projects/SSB tax")
+load("nhanes_imp")
+sf_nhanes = c() 
+
+
+for (i in 1:dim(sf)[1]){
+newsf = sample_n(nhanes_imp[(nhanes_imp$age>=sf$age_min[i] &
+                                nhanes_imp$age<sf$age_max[i] &
+                                (as.numeric(nhanes_imp$female)-1) == sf$female[i] &
+                                (as.numeric(nhanes_imp$white)-1) ==  sf$white[i] & 
+                                (as.numeric(nhanes_imp$black)-1) == sf$black[i] & 
+                                (as.numeric(nhanes_imp$asian)-1) == sf$asian[i] & 
+                                (as.numeric(nhanes_imp$hisp)-1) == sf$hisp[i]),],round(sf$estimate[i]/100),`replace` = TRUE)
+sf_nhanes  = rbind(sf_nhanes,newsf)
+}
+
+
+write_csv(sf_nhanes, path = "~/Box/Research/Research projects/SSB tax/sf_nhanes.csv")
+
+
+oak_nhanes = c() 
+
+
+for (i in 1:dim(oak)[1]){
+  newoak = sample_n(nhanes_imp[(nhanes_imp$age>=oak$age_min[i] &
+                                 nhanes_imp$age<oak$age_max[i] &
+                                 (as.numeric(nhanes_imp$female)-1) == oak$female[i] &
+                                 (as.numeric(nhanes_imp$white)-1) ==  oak$white[i] & 
+                                 (as.numeric(nhanes_imp$black)-1) == oak$black[i] & 
+                                 (as.numeric(nhanes_imp$asian)-1) == oak$asian[i] & 
+                                 (as.numeric(nhanes_imp$hisp)-1) == oak$hisp[i]),],round(oak$estimate[i]/100),`replace` = TRUE)
+  oak_nhanes  = rbind(oak_nhanes,newoak)
+}
+
+
+write_csv(oak_nhanes, path = "~/Box/Research/Research projects/SSB tax/oak_nhanes.csv")
+
+
+
+```
+
+
+
+## summary stats
+
+```{r NHANES vs Census}
+sf_nhanesDesign <- svydesign(id      = ~psu,
+                          strata  = ~strata,
+                          weights = ~intweight,
+                          nest    = TRUE,
+                          data    = sf_nhanes)
+sf_nhanes_mec = sf_nhanes %>%
+  filter(mecweight!='NA')
+sf_nhanesDesign_mec <- svydesign(id      = ~psu,
+                          strata  = ~strata,
+                          weights = ~mecweight,
+                          nest    = TRUE,
+                          data    = sf_nhanes_mec)
+sf_nhanes_lab = sf_nhanes %>%
+  filter(fastweight!='NA')
+sf_nhanesDesign_lab <- svydesign(id      = ~psu,
+                          strata  = ~strata,
+                          weights = ~fastweight,
+                          nest    = TRUE,
+                          data    = sf_nhanes_lab)
+
+summary(sf_nhanesDesign)
+summary(sf_nhanesDesign_mec)
+summary(sf_nhanesDesign_lab)
+
+```
+## weighted stats
+```{r weighted stats}
+svymean(~age, sf_nhanesDesign, na.rm = TRUE)
+svyquantile(~age, sf_nhanesDesign, quantiles=c(.25,.75),na.rm = TRUE)
+svymean(~female, sf_nhanesDesign, na.rm = TRUE)
+svymean(~white, sf_nhanesDesign, na.rm = TRUE)
+svymean(~black, sf_nhanesDesign, na.rm = TRUE)
+svymean(~hisp, sf_nhanesDesign, na.rm = TRUE)
+svymean(~hisp, sf_nhanesDesign, na.rm = TRUE)
+svymean(~obese, sf_nhanesDesign_mec, na.rm = TRUE)
+svymean(~chd, sf_nhanesDesign_mec, na.rm = TRUE)
+svymean(~str, sf_nhanesDesign_mec, na.rm = TRUE)
+svymean(~dm, sf_nhanesDesign_mec, na.rm = TRUE)
+svymean(~ckd, sf_nhanesDesign_lab, na.rm = TRUE)
+svymean(~dental, sf_nhanesDesign_mec, na.rm = TRUE)
+
+```
+## summary stats
+
+```{r NHANES vs Census}
+oak_nhanesDesign <- svydesign(id      = ~psu,
+                             strata  = ~strata,
+                             weights = ~intweight,
+                             nest    = TRUE,
+                             data    = oak_nhanes)
+oak_nhanes_mec = oak_nhanes %>%
+  filter(mecweight!='NA')
+oak_nhanesDesign_mec <- svydesign(id      = ~psu,
+                                 strata  = ~strata,
+                                 weights = ~mecweight,
+                                 nest    = TRUE,
+                                 data    = oak_nhanes_mec)
+oak_nhanes_lab = oak_nhanes %>%
+  filter(fastweight!='NA')
+oak_nhanesDesign_lab <- svydesign(id      = ~psu,
+                                 strata  = ~strata,
+                                 weights = ~fastweight,
+                                 nest    = TRUE,
+                                 data    = oak_nhanes_lab)
+
+summary(oak_nhanesDesign)
+summary(oak_nhanesDesign_mec)
+summary(oak_nhanesDesign_lab)
+
+```
+## weighted stats
+```{r weighted stats}
+svymean(~age, oak_nhanesDesign, na.rm = TRUE)
+svyquantile(~age, oak_nhanesDesign, quantiles=c(.25,.75),na.rm = TRUE)
+svymean(~female, oak_nhanesDesign, na.rm = TRUE)
+svymean(~white, oak_nhanesDesign, na.rm = TRUE)
+svymean(~black, oak_nhanesDesign, na.rm = TRUE)
+svymean(~hisp, oak_nhanesDesign, na.rm = TRUE)
+svymean(~hisp, oak_nhanesDesign, na.rm = TRUE)
+svymean(~obese, oak_nhanesDesign_mec, na.rm = TRUE)
+svymean(~chd, oak_nhanesDesign_mec, na.rm = TRUE)
+svymean(~str, oak_nhanesDesign_mec, na.rm = TRUE)
+svymean(~dm, oak_nhanesDesign_mec, na.rm = TRUE)
+svymean(~ckd, oak_nhanesDesign_lab, na.rm = TRUE)
+svymean(~dental, oak_nhanesDesign_mec, na.rm = TRUE)
+
+```

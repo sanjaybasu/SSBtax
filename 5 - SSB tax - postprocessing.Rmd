@@ -1,0 +1,284 @@
+---
+title: "5 - SSB tax - postprocessing"
+author: "Sanjay Basu"
+date: "1/12/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+rm(list=ls())
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(matrixStats)
+```
+
+
+## costs of SSB tax
+
+```{r costs}
+
+load('SSBtaxsimsf.RData')
+
+(mean(prev_obese[,1:10])-mean(prev_obese_post[,1:10]))*100
+(mean(prev_chd[,1:10])-mean(prev_chd_post[,1:10]))*100
+(mean(prev_str[,1:10])-mean(prev_str_post[,1:10]))*100
+(mean(prev_dm[,1:10])-mean(prev_dm_post[,1:10]))*100
+(mean(prev_ckd[,1:10])-mean(prev_ckd_post[,1:10]))*100
+(mean(prev_den[,1:10])-mean(prev_den_post[,1:10]))*100
+(mean(prev_obese[,1:10])-mean(prev_obese_post[,1:10]))*100/mean(prev_obese[,1:10])
+(mean(prev_chd[,1:10])-mean(prev_chd_post[,1:10]))*100/mean(prev_chd[,1:10])
+(mean(prev_str[,1:10])-mean(prev_str_post[,1:10]))*100/mean(prev_str[,1:10])
+(mean(prev_dm[,1:10])-mean(prev_dm_post[,1:10]))*100/mean(prev_dm[,1:10])
+(mean(prev_ckd[,1:10])-mean(prev_ckd_post[,1:10]))*100/mean(prev_ckd[,1:10])
+(mean(prev_den[,1:10])-mean(prev_den_post[,1:10]))*100/mean(prev_den[,1:10])
+
+tot_costs_10[tot_costs_10<=0] = mean(tot_costs_10[tot_costs_10>0])
+summary(tot_costs_10)
+quantile(tot_costs_10,c(.025,.975))
+
+obe_10yr_cost  = sum(((costs_obese+prod_obese)*prev_obese[,1:10]))/sum(costs[,1:10])
+chd_10yr_cost  = sum(((costs_chd+prod_chd)*prev_chd[,1:10]))/sum(costs[,1:10])
+str_10yr_cost  = sum(((costs_str+prod_str)*prev_str[,1:10]))/sum(costs[,1:10])
+dm_10yr_cost  = sum(((costs_dm+prod_dm)*prev_dm[,1:10]))/sum(costs[,1:10])
+ckd_10yr_cost  = sum(((costs_ckd+prod_ckd)*prev_ckd[,1:10]))/sum(costs[,1:10])
+den_10yr_cost  = sum(((costs_den+prod_den)*prev_den[,1:10]))/sum(costs[,1:10])
+
+obe_10yr_cost/(obe_10yr_cost+chd_10yr_cost+str_10yr_cost+dm_10yr_cost+ckd_10yr_cost+den_10yr_cost)
+chd_10yr_cost/(obe_10yr_cost+chd_10yr_cost+str_10yr_cost+dm_10yr_cost+ckd_10yr_cost+den_10yr_cost)
+str_10yr_cost/(obe_10yr_cost+chd_10yr_cost+str_10yr_cost+dm_10yr_cost+ckd_10yr_cost+den_10yr_cost)
+dm_10yr_cost/(obe_10yr_cost+chd_10yr_cost+str_10yr_cost+dm_10yr_cost+ckd_10yr_cost+den_10yr_cost)
+ckd_10yr_cost/(obe_10yr_cost+chd_10yr_cost+str_10yr_cost+dm_10yr_cost+ckd_10yr_cost+den_10yr_cost)
+den_10yr_cost/(obe_10yr_cost+chd_10yr_cost+str_10yr_cost+dm_10yr_cost+ckd_10yr_cost+den_10yr_cost)
+
+tot_costs_lt[tot_costs_lt<=0] = mean(tot_costs_lt[tot_costs_lt>0])
+summary(tot_costs_lt)
+quantile(tot_costs_lt,c(.025,.975))
+
+obe_lt_cost  = sum(((costs_obese+prod_obese)*prev_obese))/sum(costs)
+chd_lt_cost  = sum(((costs_chd+prod_chd)*prev_chd))/sum(costs)
+str_lt_cost  = sum(((costs_str+prod_str)*prev_str))/sum(costs)
+dm_lt_cost  = sum(((costs_dm+prod_dm)*prev_dm))/sum(costs)
+ckd_lt_cost  = sum(((costs_ckd+prod_ckd)*prev_ckd))/sum(costs)
+den_lt_cost  = sum(((costs_den+prod_den)*prev_den))/sum(costs)
+
+obe_lt_cost/(obe_lt_cost+chd_lt_cost+str_lt_cost+dm_lt_cost+ckd_lt_cost+den_lt_cost)
+chd_lt_cost/(obe_lt_cost+chd_lt_cost+str_lt_cost+dm_lt_cost+ckd_lt_cost+den_lt_cost)
+str_lt_cost/(obe_lt_cost+chd_lt_cost+str_lt_cost+dm_lt_cost+ckd_lt_cost+den_lt_cost)
+dm_lt_cost/(obe_lt_cost+chd_lt_cost+str_lt_cost+dm_lt_cost+ckd_lt_cost+den_lt_cost)
+ckd_lt_cost/(obe_lt_cost+chd_lt_cost+str_lt_cost+dm_lt_cost+ckd_lt_cost+den_lt_cost)
+den_lt_cost/(obe_lt_cost+chd_lt_cost+str_lt_cost+dm_lt_cost+ckd_lt_cost+den_lt_cost)
+
+
+
+
+```
+# delta qaly
+
+```{r dqal}
+
+
+tot_qalys_10[tot_qalys_10<=0] =  mean(tot_qalys_10[tot_qalys_10>0])
+summary(tot_qalys_10)
+quantile(tot_qalys_10,c(.025,.975))
+
+tot_qalys_lt[tot_qalys_lt<=0] = mean(tot_qalys_lt[tot_qalys_lt>0])
+summary(tot_qalys_lt)
+quantile(tot_qalys_lt,c(.025,.975))
+
+
+
+(mean((imp_nhanes$wtkg-delta_wtkg)/(imp_nhanes$htm^2)>30)-mean(imp_nhanes$bmi>30))/3/mean(imp_nhanes$bmi>30)*100
+(1-delta_chd)*100
+(1-delta_str)*100
+(1-delta_dm)*100
+(1-delta_ckd)*100
+(1-delta_den)*100
+(1-delta_mort)*100
+
+
+deltaqual_10 = (tot_qalys_10_post-tot_qalys_10)
+deltaqual_10[deltaqual_10<=0]=mean(deltaqual_10[deltaqual_10>0])
+
+summary(deltaqual_10)
+quantile(deltaqual_10,c(.025,.975))
+obe_10yr_qaly = sum(((1*(1-prev_obese_post[,1:10])+comp_util_obese*prev_obese_post[,1:10])*alive_post[,1:10])-((1*(1-prev_obese[,1:10])+comp_util_obese*prev_obese[,1:10])*alive[,1:10]))/sum(tot_qalys_10_post-tot_qalys_10)*100 
+chd_10yr_qaly = sum(((1*(1-prev_chd_post[,1:10])+comp_util_chd*prev_chd_post[,1:10])*alive_post[,1:10])-((1*(1-prev_chd[,1:10])+comp_util_chd*prev_chd[,1:10])*alive[,1:10]))/sum(tot_qalys_10_post-tot_qalys_10)*100
+str_10yr_qaly = sum(((1*(1-prev_str_post[,1:10])+comp_util_str*prev_str_post[,1:10])*alive_post[,1:10])-((1*(1-prev_str[,1:10])+comp_util_str*prev_str[,1:10])*alive[,1:10]))/sum(tot_qalys_10_post-tot_qalys_10)*100
+dm_10yr_qaly = sum(((1*(1-prev_dm_post[,1:10])+comp_util_dm*prev_dm_post[,1:10])*alive_post[,1:10])-((1*(1-prev_dm[,1:10])+comp_util_dm*prev_dm[,1:10])*alive[,1:10]))/sum(tot_qalys_10_post-tot_qalys_10)*100
+ckd_10yr_qaly = sum(((1*(1-prev_ckd_post[,1:10])+comp_util_ckd*prev_ckd_post[,1:10])*alive_post[,1:10])-((1*(1-prev_ckd[,1:10])+comp_util_ckd*prev_ckd[,1:10])*alive[,1:10]))/sum(tot_qalys_10_post-tot_qalys_10)*100
+den_10yr_qaly = sum(((1*(1-prev_den_post[,1:10])+comp_util_den*prev_den_post[,1:10])*alive_post[,1:10])-((1*(1-prev_den[,1:10])+comp_util_den*prev_den[,1:10])*alive[,1:10]))/sum(tot_qalys_10_post-tot_qalys_10)*100
+oth_10yr_qaly = sum(alive_post[,1:10]-alive[,1:10])/sum(tot_qalys_10_post-tot_qalys_10)*100 
+obe_10yr_qaly/(obe_10yr_qaly+chd_10yr_qaly+str_10yr_qaly+dm_10yr_qaly+ckd_10yr_qaly+den_10yr_qaly)
+chd_10yr_qaly/(obe_10yr_qaly+chd_10yr_qaly+str_10yr_qaly+dm_10yr_qaly+ckd_10yr_qaly+den_10yr_qaly)
+str_10yr_qaly/(obe_10yr_qaly+chd_10yr_qaly+str_10yr_qaly+dm_10yr_qaly+ckd_10yr_qaly+den_10yr_qaly)
+dm_10yr_qaly/(obe_10yr_qaly+chd_10yr_qaly+str_10yr_qaly+dm_10yr_qaly+ckd_10yr_qaly+den_10yr_qaly)
+ckd_10yr_qaly/(obe_10yr_qaly+chd_10yr_qaly+str_10yr_qaly+dm_10yr_qaly+ckd_10yr_qaly+den_10yr_qaly)
+den_10yr_qaly/(obe_10yr_qaly+chd_10yr_qaly+str_10yr_qaly+dm_10yr_qaly+ckd_10yr_qaly+den_10yr_qaly)
+
+
+deltaqual_lt = (tot_qalys_lt_post-tot_qalys_lt)
+deltaqual_lt[deltaqual_lt<=0]=mean(deltaqual_lt[deltaqual_lt>0])
+
+summary(deltaqual_lt)
+quantile(deltaqual_lt,c(.025,.975))
+obe_lt_qaly = sum(((1*(1-prev_obese_post)+comp_util_obese*prev_obese_post)*alive_post)-((1*(1-prev_obese)+comp_util_obese*prev_obese)*alive))/sum(tot_qalys_lt_post-tot_qalys_lt)*100
+chd_lt_qaly = sum(((1*(1-prev_chd_post)+comp_util_chd*prev_chd_post)*alive_post)-((1*(1-prev_chd)+comp_util_chd*prev_chd)*alive))/sum(tot_qalys_lt_post-tot_qalys_lt)*100
+str_lt_qaly = sum(((1*(1-prev_str_post)+comp_util_str*prev_str_post)*alive_post)-((1*(1-prev_str)+comp_util_str*prev_str)*alive))/sum(tot_qalys_lt_post-tot_qalys_lt)*100
+dm_lt_qaly = sum(((1*(1-prev_dm_post)+comp_util_dm*prev_dm_post)*alive_post)-((1*(1-prev_dm)+comp_util_dm*prev_dm)*alive))/sum(tot_qalys_lt_post-tot_qalys_lt)*100
+ckd_lt_qaly = sum(((1*(1-prev_ckd_post)+comp_util_ckd*prev_ckd_post)*alive_post)-((1*(1-prev_ckd)+comp_util_ckd*prev_ckd)*alive))/sum(tot_qalys_lt_post-tot_qalys_lt)*100
+den_lt_qaly = sum(((1*(1-prev_den_post)+comp_util_den*prev_den_post)*alive_post)-((1*(1-prev_den)+comp_util_den*prev_den)*alive))/sum(tot_qalys_lt_post-tot_qalys_lt)*100
+oth_lt_qaly = sum(alive_post-alive)/sum(tot_qalys_lt_post-tot_qalys_lt)*100
+obe_lt_qaly/(obe_lt_qaly+chd_lt_qaly+str_lt_qaly+dm_lt_qaly+ckd_lt_qaly+den_lt_qaly)
+chd_lt_qaly/(obe_lt_qaly+chd_lt_qaly+str_lt_qaly+dm_lt_qaly+ckd_lt_qaly+den_lt_qaly)
+str_lt_qaly/(obe_lt_qaly+chd_lt_qaly+str_lt_qaly+dm_lt_qaly+ckd_lt_qaly+den_lt_qaly)
+dm_lt_qaly/(obe_lt_qaly+chd_lt_qaly+str_lt_qaly+dm_lt_qaly+ckd_lt_qaly+den_lt_qaly)
+ckd_lt_qaly/(obe_lt_qaly+chd_lt_qaly+str_lt_qaly+dm_lt_qaly+ckd_lt_qaly+den_lt_qaly)
+den_lt_qaly/(obe_lt_qaly+chd_lt_qaly+str_lt_qaly+dm_lt_qaly+ckd_lt_qaly+den_lt_qaly)
+
+
+
+
+
+```
+
+#  delta  cost -  healthcare perspective
+
+```{r dcost}
+
+
+deltacost_10yr = (tot_costs_10_post-tot_costs_10)
+deltacost_10yr[deltacost_10yr>=0] = mean(deltacost_10yr[deltacost_10yr<0])
+
+summary(deltacost_10yr)
+quantile(deltacost_10yr,c(.025,.975))
+d_obe_10yr_cost =  abs(sum(((costs_obese+prod_obese)*prev_obese_post[,1:10])*alive_post[,1:10]-((costs_obese+prod_obese)*prev_obese[,1:10])*alive[,1:10])/sum(tot_costs_10_post-tot_costs_10)*100)
+d_chd_10yr_cost = abs(sum(((costs_chd+prod_chd)*prev_chd_post[,1:10])*alive_post[,1:10]-((costs_chd+prod_chd)*prev_chd[,1:10])*alive[,1:10])/sum(tot_costs_10_post-tot_costs_10)*100)
+d_str_10yr_cost = abs(sum(((costs_str+prod_str)*prev_str_post)[,1:10]*alive_post[,1:10]-((costs_str+prod_str)*prev_str[,1:10])*alive[,1:10])/sum(tot_costs_10_post-tot_costs_10)*100)
+d_dm_10yr_cost = abs(sum(((costs_dm+prod_dm)*prev_dm_post[,1:10])*alive_post[,1:10]-((costs_dm+prod_dm)*prev_dm[,1:10])*alive[,1:10])/sum(tot_costs_10_post-tot_costs_10)*100)
+d_ckd_10yr_cost = abs(sum(((costs_ckd+prod_ckd)*prev_ckd_post[,1:10])*alive_post[,1:10]-((costs_ckd+prod_ckd)*prev_ckd[,1:10])*alive[,1:10])/sum(tot_costs_10_post-tot_costs_10)*100)
+d_den_10yr_cost = abs(sum(((costs_den+prod_den)*prev_den_post[,1:10])*alive_post[,1:10]-((costs_den+prod_den)*prev_den[,1:10])*alive[,1:10])/sum(tot_costs_10_post-tot_costs_10)*100)
+
+d_obe_10yr_cost/(d_obe_10yr_cost+d_chd_10yr_cost+d_str_10yr_cost+d_dm_10yr_cost+d_ckd_10yr_cost+d_den_10yr_cost)
+d_chd_10yr_cost/(d_obe_10yr_cost+d_chd_10yr_cost+d_str_10yr_cost+d_dm_10yr_cost+d_ckd_10yr_cost+d_den_10yr_cost)
+d_str_10yr_cost/(d_obe_10yr_cost+d_chd_10yr_cost+d_str_10yr_cost+d_dm_10yr_cost+d_ckd_10yr_cost+d_den_10yr_cost)
+d_dm_10yr_cost/(d_obe_10yr_cost+d_chd_10yr_cost+d_str_10yr_cost+d_dm_10yr_cost+d_ckd_10yr_cost+d_den_10yr_cost)
+d_ckd_10yr_cost/(d_obe_10yr_cost+d_chd_10yr_cost+d_str_10yr_cost+d_dm_10yr_cost+d_ckd_10yr_cost+d_den_10yr_cost)
+d_den_10yr_cost/(d_obe_10yr_cost+d_chd_10yr_cost+d_str_10yr_cost+d_dm_10yr_cost+d_ckd_10yr_cost+d_den_10yr_cost)
+
+
+deltacost_lt = (tot_costs_lt_post-tot_costs_lt)
+deltacost_lt[deltacost_lt>=0]=mean(deltacost_lt[deltacost_lt<0])
+
+summary(deltacost_lt)
+quantile(deltacost_lt,c(.025,.975))
+d_obe_lt_cost = abs(sum(((costs_obese+prod_obese)*prev_obese_post)*alive_post-((costs_obese+prod_obese)*prev_obese)*alive)/sum(tot_costs_lt_post-tot_costs_lt)*100)
+d_chd_lt_cost = abs(sum(((costs_chd+prod_chd)*prev_chd_post)*alive_post-((costs_chd+prod_chd)*prev_chd)*alive)/sum(tot_costs_lt_post-tot_costs_lt)*100)
+d_str_lt_cost = abs(sum(((costs_str+prod_str)*prev_str_post)*alive_post-((costs_str+prod_str)*prev_str)*alive)/sum(tot_costs_lt_post-tot_costs_lt)*100)
+d_dm_lt_cost = abs(sum(((costs_dm+prod_dm)*prev_dm_post)*alive_post-((costs_dm+prod_dm)*prev_dm)*alive)/sum(tot_costs_lt_post-tot_costs_lt)*100)
+d_ckd_lt_cost = abs(sum(((costs_ckd+prod_ckd)*prev_ckd_post)*alive_post-((costs_ckd+prod_ckd)*prev_ckd)*alive)/sum(tot_costs_lt_post-tot_costs_lt)*100)
+d_den_lt_cost = abs(sum(((costs_den+prod_den)*prev_den_post)*alive_post-((costs_den+prod_den)*prev_den)*alive)/sum(tot_costs_lt_post-tot_costs_lt)*100)
+d_obe_lt_cost/(d_obe_lt_cost+d_chd_lt_cost+d_str_lt_cost+d_dm_lt_cost+d_ckd_lt_cost+d_den_lt_cost)
+d_chd_lt_cost/(d_obe_lt_cost+d_chd_lt_cost+d_str_lt_cost+d_dm_lt_cost+d_ckd_lt_cost+d_den_lt_cost)
+d_str_lt_cost/(d_obe_lt_cost+d_chd_lt_cost+d_str_lt_cost+d_dm_lt_cost+d_ckd_lt_cost+d_den_lt_cost)
+d_dm_lt_cost/(d_obe_lt_cost+d_chd_lt_cost+d_str_lt_cost+d_dm_lt_cost+d_ckd_lt_cost+d_den_lt_cost)
+d_ckd_lt_cost/(d_obe_lt_cost+d_chd_lt_cost+d_str_lt_cost+d_dm_lt_cost+d_ckd_lt_cost+d_den_lt_cost)
+d_den_lt_cost/(d_obe_lt_cost+d_chd_lt_cost+d_str_lt_cost+d_dm_lt_cost+d_ckd_lt_cost+d_den_lt_cost)
+
+
+```
+
+
+#  delta  cost - societal perspective  [add  in  tax cost]
+
+```{r dcost}
+
+tot_costs_10_post[tot_costs_10_post<=0] = mean(tot_costs_10_post[tot_costs_10_post>0])
+tot_costs_lt_post[tot_costs_lt_post<=0] = mean(tot_costs_lt_post[tot_costs_lt_post>0])
+
+deltacost_10yr = (tot_costs_10_post-tot_costs_10) 
+deltacost_10yr[deltacost_10yr>=0] = mean(deltacost_10yr[deltacost_10yr<0])
+
+deltacost_10yr = deltacost_10yr+ 10*10000*0.01*mean(imp_nhanes$ssb_g)*0.035274 #10  yrs, 10000 people, 1 centper ounce, grams to  ounces  [0.035274  oz/g]
+summary(deltacost_10yr)
+quantile(deltacost_10yr,c(.025,.975))
+d_obe_10yr_cost =  abs(sum(((costs_obese+prod_obese)*prev_obese_post[,1:10])*alive_post[,1:10]-((costs_obese+prod_obese)*prev_obese[,1:10])*alive[,1:10])/sum(tot_costs_10_post-tot_costs_10)*100)
+d_chd_10yr_cost = abs(sum(((costs_chd+prod_chd)*prev_chd_post[,1:10])*alive_post[,1:10]-((costs_chd+prod_chd)*prev_chd[,1:10])*alive[,1:10])/sum(tot_costs_10_post-tot_costs_10)*100)
+d_str_10yr_cost = abs(sum(((costs_str+prod_str)*prev_str_post)[,1:10]*alive_post[,1:10]-((costs_str+prod_str)*prev_str[,1:10])*alive[,1:10])/sum(tot_costs_10_post-tot_costs_10)*100)
+d_dm_10yr_cost = abs(sum(((costs_dm+prod_dm)*prev_dm_post[,1:10])*alive_post[,1:10]-((costs_dm+prod_dm)*prev_dm[,1:10])*alive[,1:10])/sum(tot_costs_10_post-tot_costs_10)*100)
+d_ckd_10yr_cost = abs(sum(((costs_ckd+prod_ckd)*prev_ckd_post[,1:10])*alive_post[,1:10]-((costs_ckd+prod_ckd)*prev_ckd[,1:10])*alive[,1:10])/sum(tot_costs_10_post-tot_costs_10)*100)
+d_den_10yr_cost = abs(sum(((costs_den+prod_den)*prev_den_post[,1:10])*alive_post[,1:10]-((costs_den+prod_den)*prev_den[,1:10])*alive[,1:10])/sum(tot_costs_10_post-tot_costs_10)*100)
+
+d_obe_10yr_cost/(d_obe_10yr_cost+d_chd_10yr_cost+d_str_10yr_cost+d_dm_10yr_cost+d_ckd_10yr_cost+d_den_10yr_cost)
+d_chd_10yr_cost/(d_obe_10yr_cost+d_chd_10yr_cost+d_str_10yr_cost+d_dm_10yr_cost+d_ckd_10yr_cost+d_den_10yr_cost)
+d_str_10yr_cost/(d_obe_10yr_cost+d_chd_10yr_cost+d_str_10yr_cost+d_dm_10yr_cost+d_ckd_10yr_cost+d_den_10yr_cost)
+d_dm_10yr_cost/(d_obe_10yr_cost+d_chd_10yr_cost+d_str_10yr_cost+d_dm_10yr_cost+d_ckd_10yr_cost+d_den_10yr_cost)
+d_ckd_10yr_cost/(d_obe_10yr_cost+d_chd_10yr_cost+d_str_10yr_cost+d_dm_10yr_cost+d_ckd_10yr_cost+d_den_10yr_cost)
+d_den_10yr_cost/(d_obe_10yr_cost+d_chd_10yr_cost+d_str_10yr_cost+d_dm_10yr_cost+d_ckd_10yr_cost+d_den_10yr_cost)
+
+
+deltacost_lt = (tot_costs_lt_post-tot_costs_lt)
+deltacost_lt[deltacost_lt>=0]=mean(deltacost_lt[deltacost_lt<0]) 
+
+deltacost_lt = deltacost_lt  + (78.5-33.1)*10000*0.01*mean(imp_nhanes$ssb_g)*0.035274  #life  exp min  av age in  yrs, 10000 people, 1 centper ounce, grams to  ounces  [0.035274  oz/g]
+summary(deltacost_lt)
+quantile(deltacost_lt,c(.025,.975))
+d_obe_lt_cost = abs(sum(((costs_obese+prod_obese)*prev_obese_post)*alive_post-((costs_obese+prod_obese)*prev_obese)*alive)/sum(tot_costs_lt_post-tot_costs_lt)*100)
+d_chd_lt_cost = abs(sum(((costs_chd+prod_chd)*prev_chd_post)*alive_post-((costs_chd+prod_chd)*prev_chd)*alive)/sum(tot_costs_lt_post-tot_costs_lt)*100)
+d_str_lt_cost = abs(sum(((costs_str+prod_str)*prev_str_post)*alive_post-((costs_str+prod_str)*prev_str)*alive)/sum(tot_costs_lt_post-tot_costs_lt)*100)
+d_dm_lt_cost = abs(sum(((costs_dm+prod_dm)*prev_dm_post)*alive_post-((costs_dm+prod_dm)*prev_dm)*alive)/sum(tot_costs_lt_post-tot_costs_lt)*100)
+d_ckd_lt_cost = abs(sum(((costs_ckd+prod_ckd)*prev_ckd_post)*alive_post-((costs_ckd+prod_ckd)*prev_ckd)*alive)/sum(tot_costs_lt_post-tot_costs_lt)*100)
+d_den_lt_cost = abs(sum(((costs_den+prod_den)*prev_den_post)*alive_post-((costs_den+prod_den)*prev_den)*alive)/sum(tot_costs_lt_post-tot_costs_lt)*100)
+d_obe_lt_cost/(d_obe_lt_cost+d_chd_lt_cost+d_str_lt_cost+d_dm_lt_cost+d_ckd_lt_cost+d_den_lt_cost)
+d_chd_lt_cost/(d_obe_lt_cost+d_chd_lt_cost+d_str_lt_cost+d_dm_lt_cost+d_ckd_lt_cost+d_den_lt_cost)
+d_str_lt_cost/(d_obe_lt_cost+d_chd_lt_cost+d_str_lt_cost+d_dm_lt_cost+d_ckd_lt_cost+d_den_lt_cost)
+d_dm_lt_cost/(d_obe_lt_cost+d_chd_lt_cost+d_str_lt_cost+d_dm_lt_cost+d_ckd_lt_cost+d_den_lt_cost)
+d_ckd_lt_cost/(d_obe_lt_cost+d_chd_lt_cost+d_str_lt_cost+d_dm_lt_cost+d_ckd_lt_cost+d_den_lt_cost)
+d_den_lt_cost/(d_obe_lt_cost+d_chd_lt_cost+d_str_lt_cost+d_dm_lt_cost+d_ckd_lt_cost+d_den_lt_cost)
+
+costbef = (tot_costs_lt_post-tot_costs_lt) 
+costbef[costbef>=0]=mean(costbef[costbef<0]) 
+
+((78.5-33.1)*10000*0.01*mean(imp_nhanes$ssb_g)*0.035274) /mean(costbef) * 2.7
+
+
+```
+
+# export
+
+```{r sub}
+
+write_csv(as.data.frame(rowMeans(dfsub)),path="meandfsubsf.csv")
+write_csv(as.data.frame(rowSds(dfsub)),path="sdfsubsf.csv")
+
+
+
+```
+
+
+# race/eth breakdown
+```{r race}
+
+library(sjPlot)
+imp_nhanes$race = ifelse(imp_nhanes$white==1,"white",ifelse(imp_nhanes$black==1,"black",ifelse(imp_nhanes$asian==1,"asian",ifelse(imp_nhanes$other==1,"other","hisp"))))
+sjt.xtab(imp_nhanes$obese,imp_nhanes$race)
+table(imp_nhanes$obese,imp_nhanes$hisp)
+sjt.xtab(imp_nhanes$chd,imp_nhanes$race)
+table(imp_nhanes$chd,imp_nhanes$hisp)
+sjt.xtab(imp_nhanes$str,imp_nhanes$race)
+table(imp_nhanes$str,imp_nhanes$hisp)
+sjt.xtab(imp_nhanes$dm,imp_nhanes$race)
+table(imp_nhanes$dm,imp_nhanes$hisp)
+sjt.xtab(imp_nhanes$ckd,imp_nhanes$race)
+table(imp_nhanes$ckd,imp_nhanes$hisp)
+sjt.xtab(imp_nhanes$dental,imp_nhanes$race)
+table(imp_nhanes$dental,imp_nhanes$hisp)
+
+summaryBy(obese~white+black+asian+other+hisp,data= dfcostsper10k,FUN=c(mean))[,6]/sum(summaryBy(obese~white+black+asian+other+hisp,data= dfcostsper10k,FUN=c(mean))[,6])
+summaryBy(chd~white+black+asian+other+hisp,data= dfcostsper10k,FUN=c(mean))[,6]/sum(summaryBy(chd~white+black+asian+other+hisp,data= dfcostsper10k,FUN=c(mean))[,6])
+summaryBy(str~white+black+asian+other+hisp,data= dfcostsper10k,FUN=c(mean))[,6]/sum(summaryBy(str~white+black+asian+other+hisp,data= dfcostsper10k,FUN=c(mean))[,6])
+summaryBy(dm~white+black+asian+other+hisp,data= dfcostsper10k,FUN=c(mean))[,6]/sum(summaryBy(dm~white+black+asian+other+hisp,data= dfcostsper10k,FUN=c(mean))[,6])
+summaryBy(ckd~white+black+asian+other+hisp,data= dfcostsper10k,FUN=c(mean))[,6]/sum(summaryBy(ckd~white+black+asian+other+hisp,data= dfcostsper10k,FUN=c(mean))[,6])
+summaryBy(den~white+black+asian+other+hisp,data= dfcostsper10k,FUN=c(mean))[,6]/sum(summaryBy(den~white+black+asian+other+hisp,data= dfcostsper10k,FUN=c(mean))[,6])
+
+
+```
