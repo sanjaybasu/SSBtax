@@ -33,7 +33,7 @@ incidence and mortality organized as: male age 15-49, female age 15-49, male age
 delta: RRR after SSB tax
 
 ```{r import from NHANES.R}
-imp_nhanes = read_csv("~/Box/Research/Research projects/SSB tax/sf_nhanes.csv")
+imp_nhanes = read_csv("sf_nhanes.csv")
 yrs = 100
 
 alive = matrix(1,nrow=length(imp_nhanes$SEQN),ncol=yrs)
@@ -95,7 +95,7 @@ mort_ckd = rep(15.1/1e5,6)
 mort_all = rep(442.3/1e5,6)
 
 
-delta_ssb = mean(imp_nhanes$ssb_g)*.035274*.027 # ounces/person/day; convert grams to ounces with *.035274,  then  multiply by percent change
+delta_ssb = mean(imp_nhanes$ssb_g)*.035274*.2139 # ounces/person/day; convert grams to ounces with *.035274,  then  multiply by percent change
 cals_per_ounce = 11.7 # calories/ounce SSBs
 delta_wtkg = delta_ssb*cals_per_ounce*1/10*0.453592 # 10 calories = 1 pound = 0.45 kg, https://www.healthaffairs.org/doi/full/10.1377/hlthaff.2011.0410
 delta_chd = (1-0.023/37*29.57353*delta_ssb) # 0.023 for 37ml, 29.57353 mL per ounce, https://journals.plos.org/plosmedicine/article?id=10.1371/journal.pmed.1002158#sec018
